@@ -15,7 +15,6 @@ use alloc::string::String;
 
 use crate::did::DID;
 use crate::error::Error;
-use crate::error::Field;
 use crate::error::Result;
 
 const METHOD: &str = "web";
@@ -39,7 +38,7 @@ pub fn new(input: impl AsRef<str>) -> Result<DID> {
 /// Creates a Web DID URL specifying the location of the DID document resource.
 pub fn url(did: &DID) -> Result<String> {
   if did.method() != METHOD {
-    return Err(Error::ParseError(Field::MethodName));
+    return Err(Error::InvalidMethodName);
   }
 
   let (domain, path): (&str, &str) = parse(did.method_id(), ':')?;
@@ -61,7 +60,7 @@ fn parse(data: &str, split: char) -> Result<(&str, &str)> {
     .map(|index| data.split_at(index))
     .unwrap_or((data, ""))
   {
-    ("", _) => Err(Error::ParseError(Field::MethodId)),
+    ("", _) => Err(Error::InvalidMethodId),
     (domain, path) => Ok((domain, path.trim_end_matches('/'))),
   }
 }

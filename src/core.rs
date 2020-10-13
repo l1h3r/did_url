@@ -4,7 +4,6 @@ use core::ops::RangeTo;
 
 use crate::did::DID;
 use crate::error::Error;
-use crate::error::Field;
 use crate::error::Result;
 use crate::input::Input;
 
@@ -113,17 +112,17 @@ impl Core {
 
   fn parse_scheme(&mut self, input: &mut Input) -> Result<()> {
     if input.exhausted() {
-      return Err(Error::ParseError(Field::Scheme));
+      return Err(Error::InvalidScheme);
     }
 
     if !matches!(input.take(3), Some(DID::SCHEME)) {
-      return Err(Error::ParseError(Field::Scheme));
+      return Err(Error::InvalidScheme);
     }
 
     if matches!(input.next(), Some(':')) {
       Ok(())
     } else {
-      Err(Error::ParseError(Field::Scheme))
+      Err(Error::InvalidScheme)
     }
   }
 
@@ -135,14 +134,14 @@ impl Core {
         Some(':') | None => break,
         Some('a'..='z') => {}
         Some('0'..='9') => {}
-        _ => return Err(Error::ParseError(Field::MethodName)),
+        _ => return Err(Error::InvalidMethodName),
       }
 
       input.next();
     }
 
     if self.method == input.index() {
-      return Err(Error::ParseError(Field::MethodName));
+      return Err(Error::InvalidMethodName);
     }
 
     input.next();
@@ -160,7 +159,7 @@ impl Core {
         Some('0'..='9') => {}
         Some('.' | '-' | '_') => {}
         Some(':') if input.index() > self.method_id => {}
-        _ => return Err(Error::ParseError(Field::MethodId)),
+        _ => return Err(Error::InvalidMethodId),
       }
 
       input.next();
@@ -169,7 +168,7 @@ impl Core {
     // TODO: Return Err if colon is last parsed char
 
     if self.method_id == input.index() {
-      return Err(Error::ParseError(Field::MethodId));
+      return Err(Error::InvalidMethodId);
     }
 
     Ok(())
@@ -191,7 +190,7 @@ impl Core {
         Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
         Some(':' | '@') => {}
         Some('/') => {}
-        _ => return Err(Error::ParseError(Field::Path)),
+        _ => return Err(Error::InvalidPath),
       }
 
       input.next();
@@ -208,7 +207,7 @@ impl Core {
     if matches!(input.peek(), Some('?')) {
       input.next();
     } else {
-      return Err(Error::ParseError(Field::Query));
+      return Err(Error::InvalidQuery);
     }
 
     self.query = Some(input.index() - 1);
@@ -222,7 +221,7 @@ impl Core {
         Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
         Some(':' | '@') => {}
         Some('/' | '?') => {}
-        _ => return Err(Error::ParseError(Field::Query)),
+        _ => return Err(Error::InvalidQuery),
       }
 
       input.next();
@@ -239,7 +238,7 @@ impl Core {
     if matches!(input.peek(), Some('#')) {
       input.next();
     } else {
-      return Err(Error::ParseError(Field::Fragment));
+      return Err(Error::InvalidFragment);
     }
 
     self.fragment = Some(input.index() - 1);
@@ -253,7 +252,7 @@ impl Core {
         Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
         Some(':' | '@') => {}
         Some('/' | '?') => {}
-        _ => return Err(Error::ParseError(Field::Fragment)),
+        _ => return Err(Error::InvalidFragment),
       }
 
       input.next();

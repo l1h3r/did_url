@@ -378,7 +378,6 @@ mod resolution {
   use crate::core::Core;
   use crate::did::DID;
   use crate::error::Error;
-  use crate::error::Field;
   use crate::error::Result;
 
   #[derive(Debug)]
@@ -463,7 +462,7 @@ mod resolution {
     // The DID authority is `<method>:<method-specific-id>` so it should always
     // be present for non-relative DIDs.
     if base.method().is_empty() || base.method_id().is_empty() {
-      return Err(Error::JoinError(Field::Authority));
+      return Err(Error::InvalidAuthority);
     }
 
     // 1. If the base URI has a defined authority component and an empty
