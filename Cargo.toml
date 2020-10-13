@@ -3,7 +3,28 @@ name = "did"
 version = "0.1.0"
 authors = ["l1h3r <devin.turner09@gmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+description = "A no_std parser for Decentralized Identifiers (DIDs)"
+repository = "https://github.com/l1h3r/did"
+keywords = ["decentralized", "identity", "did"]
+categories = ["parser"]
+readme = "README.md"
 
 [dependencies]
+form_urlencoded = { version = "1.0", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
+
+[dev-dependencies]
+proptest = { version = "0.10.1" }
+
+[features]
+default = ["std"]
+
+# Enables functionality requiring the `std` crate.
+std = ["alloc"]
+
+# Enables functionality requiring the `alloc` crate.
+alloc = []
+
+# Adds Deserialize/Serialize implementations for `DID`.
+# serde = []
