@@ -6,6 +6,7 @@ use core::fmt::Result as FmtResult;
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Error {
   InvalidAuthority,
   InvalidFragment,
