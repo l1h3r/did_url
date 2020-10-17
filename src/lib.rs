@@ -9,6 +9,9 @@
 #![feature(or_patterns)]
 #![no_std]
 
+#[cfg(not(feature = "alloc"))]
+compile_error!("This crate does not yet support environments without liballoc.");
+
 #[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "std")]
