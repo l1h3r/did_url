@@ -18,6 +18,21 @@ use crate::core::Core;
 use crate::error::Error;
 use crate::error::Result;
 
+#[derive(Clone, Copy)]
+pub struct Inspect<'a>(&'a DID);
+
+impl Debug for Inspect<'_> {
+  fn fmt(&self, f: &mut Formatter) -> FmtResult {
+    f.debug_struct("DID")
+      .field("method", &self.0.method())
+      .field("method_id", &self.0.method_id())
+      .field("path", &self.0.path())
+      .field("query", &self.0.query())
+      .field("fragment", &self.0.fragment())
+      .finish()
+  }
+}
+
 /// A Decentralized Identifier (DID).
 ///
 /// [More Info (W3C DID Core)](https://www.w3.org/TR/did-core/)
@@ -43,6 +58,11 @@ impl DID {
       data: input.as_ref().to_string(),
       core: Core::parse(input)?,
     })
+  }
+
+  /// Returns a wrapped `DID` with a more detailed `Debug` implementation.
+  pub const fn inspect(&self) -> Inspect {
+    Inspect(self)
   }
 
   /// Returns the serialized [`DID`].
@@ -273,13 +293,7 @@ impl PartialEq<&'_ str> for DID {
 
 impl Debug for DID {
   fn fmt(&self, f: &mut Formatter) -> FmtResult {
-    f.debug_struct("DID")
-      .field("method", &self.method())
-      .field("method_id", &self.method_id())
-      .field("path", &self.path())
-      .field("query", &self.query())
-      .field("fragment", &self.fragment())
-      .finish()
+    f.write_fmt(format_args!("{:?}", self.as_str()))
   }
 }
 
