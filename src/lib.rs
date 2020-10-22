@@ -30,9 +30,6 @@ pub use self::did::DID;
 pub use self::error::Error;
 pub use self::error::Result;
 
-#[cfg(feature = "ext")]
-pub mod ext;
-
 /// A helper macro to assist with the construction of [`DID`]s.
 #[macro_export]
 macro_rules! did {

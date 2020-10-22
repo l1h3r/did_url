@@ -8,6 +8,7 @@ description = "A no_std parser for Decentralized Identifiers (DIDs)"
 repository = "https://github.com/l1h3r/did"
 keywords = ["decentralized", "identity", "did"]
 categories = ["parser-implementations", "encoding"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 readme = "README.md"
 
 [dependencies]
@@ -28,6 +29,3 @@ alloc = []
 
 # Adds Deserialize/Serialize implementations for `DID`.
 # serde = []
-
-# Enables extended DID functionality.
-ext = []
