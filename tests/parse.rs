@@ -1,4 +1,4 @@
-use did::DID;
+use did_url::DID;
 
 #[test]
 #[rustfmt::skip]

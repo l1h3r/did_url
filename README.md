@@ -5,7 +5,7 @@
 ---
 
 ```rust
-use did::DID;
+use did_url::DID;
 
 let did = DID::parse("did:example:alice")?;
 

@@ -1,11 +1,11 @@
 [package]
-name = "did"
+name = "did_url"
 version = "0.1.0"
 authors = ["l1h3r <devin.turner09@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "A no_std parser for Decentralized Identifiers (DIDs)"
-repository = "https://github.com/l1h3r/did"
+repository = "https://github.com/l1h3r/did_url"
 keywords = ["decentralized", "identity", "did"]
 categories = ["parser-implementations", "encoding"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]

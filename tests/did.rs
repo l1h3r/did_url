@@ -1,4 +1,4 @@
-use did::*;
+use did_url::*;
 
 #[test]
 fn test_method() -> Result<()> {

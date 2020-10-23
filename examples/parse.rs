@@ -1,6 +1,6 @@
-use did::did;
-use did::Result;
-use did::DID;
+use did_url::did;
+use did_url::Result;
+use did_url::DID;
 
 #[rustfmt::skip]
 fn main() -> Result<()> {

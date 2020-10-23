@@ -7,7 +7,7 @@ fn short(bench: &mut test::Bencher) {
 
   bench.bytes = did.len() as u64;
 
-  bench.iter(|| test::black_box(did).parse::<did::DID>().unwrap());
+  bench.iter(|| test::black_box(did).parse::<did_url::DID>().unwrap());
 }
 
 #[bench]
@@ -16,5 +16,5 @@ fn full(bench: &mut test::Bencher) {
 
   bench.bytes = did.len() as u64;
 
-  bench.iter(|| test::black_box(did).parse::<did::DID>().unwrap());
+  bench.iter(|| test::black_box(did).parse::<did_url::DID>().unwrap());
 }
