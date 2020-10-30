@@ -10,8 +10,6 @@ use core::fmt::Formatter;
 use core::fmt::Result as FmtResult;
 use core::hash::Hash;
 use core::hash::Hasher;
-use core::ops::Deref;
-use core::ops::DerefMut;
 use core::str::FromStr;
 
 use crate::core::Core;
@@ -61,6 +59,7 @@ impl DID {
   }
 
   /// Returns a wrapped `DID` with a more detailed `Debug` implementation.
+  #[inline]
   pub const fn inspect(&self) -> Inspect {
     Inspect(self)
   }
@@ -68,172 +67,98 @@ impl DID {
   /// Returns the serialized [`DID`].
   ///
   /// This is fast since the serialized value is stored in the [`DID`].
+  #[inline]
   pub fn as_str(&self) -> &str {
     &*self.data
   }
 
   /// Consumes the [`DID`] and returns the serialization.
   #[cfg(feature = "alloc")]
+  #[inline]
   pub fn into_string(self) -> String {
     self.data
   }
 
   /// Returns the [`DID`] scheme. See [`DID::SCHEME`].
+  #[inline]
   pub const fn scheme(&self) -> &'static str {
     DID::SCHEME
   }
 
   /// Returns the [`DID`] authority.
-  #[cfg(feature = "alloc")]
-  pub fn authority(&self) -> String {
-    [self.method(), self.method_id()].join(":")
+  #[inline]
+  pub fn authority(&self) -> &str {
+    self.core.authority(self.as_str())
   }
 
   /// Returns the [`DID`] method name.
+  #[inline]
   pub fn method(&self) -> &str {
     self.core.method(self.as_str())
   }
 
   /// Returns the [`DID`] method-specific ID.
+  #[inline]
   pub fn method_id(&self) -> &str {
     self.core.method_id(self.as_str())
   }
 
   /// Returns the [`DID`] path.
+  #[inline]
   pub fn path(&self) -> &str {
     self.core.path(self.as_str())
   }
 
   /// Returns the [`DID`] method query, if any.
+  #[inline]
   pub fn query(&self) -> Option<&str> {
     self.core.query(self.as_str())
   }
 
   /// Returns the [`DID`] method fragment, if any.
+  #[inline]
   pub fn fragment(&self) -> Option<&str> {
     self.core.fragment(self.as_str())
   }
 
   /// Parses the [`DID`] query and returns an iterator of (key, value) pairs.
+  #[inline]
   pub fn query_pairs(&self) -> form_urlencoded::Parse {
     self.core.query_pairs(self.as_str())
   }
 
   /// Change the method of the [`DID`].
+  #[inline]
   pub fn set_method(&mut self, value: impl AsRef<str>) {
-    let val: &str = value.as_ref();
-    let int: Int = Int::new(self.method_id, self.method + val.len() as u32 + 1);
-
-    self
-      .data
-      .replace_range(self.method as usize..self.method_id as usize - 1, val);
-
-    self.method_id = int.add(self.method_id);
-    self.path = int.add(self.path);
-
-    self.query = self.query.map(|value| int.add(value));
-    self.fragment = self.fragment.map(|value| int.add(value));
+    self.core.set_method(&mut self.data, value.as_ref());
   }
 
   /// Change the method-specific-id of the [`DID`].
+  #[inline]
   pub fn set_method_id(&mut self, value: impl AsRef<str>) {
-    let val: &str = value.as_ref();
-    let int: Int = Int::new(self.path, self.method_id + val.len() as u32);
-
-    self
-      .data
-      .replace_range(self.method_id as usize..self.path as usize, val);
-
-    self.path = int.add(self.path);
-
-    self.query = self.query.map(|value| int.add(value));
-    self.fragment = self.fragment.map(|value| int.add(value));
+    self.core.set_method_id(&mut self.data, value.as_ref());
   }
 
   /// Change the path of the [`DID`].
+  #[inline]
   pub fn set_path(&mut self, value: impl AsRef<str>) {
-    let val: &str = value.as_ref();
-
-    let dst: u32 = self
-      .query
-      .or(self.fragment)
-      .unwrap_or_else(|| self.data.len() as u32);
-
-    let int: Int = Int::new(dst, self.path + val.len() as u32);
-
-    self
-      .data
-      .replace_range(self.path as usize..dst as usize, val);
-
-    self.query = self.query.map(|value| int.add(value));
-    self.fragment = self.fragment.map(|value| int.add(value));
+    self.core.set_path(&mut self.data, value.as_ref());
   }
 
   /// Change the query of the [`DID`].
   ///
   /// No serialization is performed.
+  #[inline]
   pub fn set_query(&mut self, value: Option<&str>) {
-    match (self.query, self.fragment, value) {
-      (Some(query), None, Some(value)) => {
-        self.data.replace_range(query as usize + 1.., value);
-      }
-      (None, Some(fragment), Some(value)) => {
-        self.query = Some(fragment);
-        self.data.insert_str(fragment as usize, "?");
-        self.data.insert_str(fragment as usize + 1, value);
-
-        if let Some(index) = self.fragment.as_mut() {
-          *index += value.len() as u32 + 1;
-        }
-      }
-      (Some(query), Some(fragment), Some(value)) => {
-        self
-          .data
-          .replace_range(query as usize + 1..fragment as usize, value);
-
-        if let Some(index) = self.fragment.as_mut() {
-          *index = query + value.len() as u32 + 1;
-        }
-      }
-      (None, None, Some(value)) => {
-        self.query = Some(self.data.len() as u32);
-        self.data.push('?');
-        self.data.push_str(value);
-      }
-      (Some(query), None, None) => {
-        self.query = None;
-        self.data.replace_range(query as usize.., "");
-      }
-      (Some(query), Some(fragment), None) => {
-        self.query = None;
-        self
-          .data
-          .replace_range(query as usize..fragment as usize, "");
-
-        if let Some(index) = self.fragment.as_mut() {
-          *index = *index - (*index - query);
-        }
-      }
-      (None, Some(_) | None, None) => {
-        // do nothing
-      }
-    }
+    self.core.set_query(&mut self.data, value);
   }
 
   /// Change the fragment of the [`DID`].
   ///
   /// No serialization is performed.
+  #[inline]
   pub fn set_fragment(&mut self, value: Option<&str>) {
-    let src: u32 = self.fragment.unwrap_or_else(|| self.data.len() as u32);
-
-    if let Some(value) = value {
-      self.fragment = Some(src);
-      self.data.replace_range(src as usize.., "#");
-      self.data.replace_range(src as usize + 1.., value);
-    } else {
-      self.fragment = None;
-      self.data.replace_range(src as usize.., "");
-    }
+    self.core.set_fragment(&mut self.data, value);
   }
 
   /// Creates a new [`DID`] by joining `self` with the relative DID `other`.
@@ -303,22 +228,6 @@ impl Display for DID {
   }
 }
 
-#[doc(hidden)]
-impl Deref for DID {
-  type Target = Core;
-
-  fn deref(&self) -> &Self::Target {
-    &self.core
-  }
-}
-
-#[doc(hidden)]
-impl DerefMut for DID {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.core
-  }
-}
-
 impl AsRef<str> for DID {
   fn as_ref(&self) -> &str {
     self.data.as_ref()
@@ -346,33 +255,6 @@ impl TryFrom<String> for DID {
 impl From<DID> for String {
   fn from(other: DID) -> Self {
     other.into_string()
-  }
-}
-
-// =============================================================================
-//
-// =============================================================================
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-enum Int {
-  N(u32),
-  P(u32),
-}
-
-impl Int {
-  const fn new(a: u32, b: u32) -> Self {
-    if a > b {
-      Self::N(a - b)
-    } else {
-      Self::P(b - a)
-    }
-  }
-
-  const fn add(self, other: u32) -> u32 {
-    match self {
-      Self::N(int) => other - int,
-      Self::P(int) => other + int,
-    }
   }
 }
 

@@ -14,10 +14,12 @@ impl<'a> Input<'a> {
     }
   }
 
+  #[inline]
   pub const fn index(&self) -> u32 {
     self.next as u32
   }
 
+  #[inline]
   pub fn exhausted(&self) -> bool {
     self.peek().is_none()
   }

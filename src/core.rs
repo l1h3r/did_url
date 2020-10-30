@@ -1,3 +1,6 @@
+#[cfg(feature = "alloc")]
+use alloc::string::String;
+
 use core::ops::Range;
 use core::ops::RangeFrom;
 use core::ops::RangeTo;
@@ -9,11 +12,11 @@ use crate::input::Input;
 
 #[derive(Clone, Debug)]
 pub struct Core {
-  pub(crate) method: u32,
-  pub(crate) method_id: u32,
-  pub(crate) path: u32,
-  pub(crate) query: Option<u32>,
-  pub(crate) fragment: Option<u32>,
+  pub(crate) method: u32,           // Includes leading :
+  pub(crate) method_id: u32,        // Includes leading :
+  pub(crate) path: u32,             // Includes leading /
+  pub(crate) query: Option<u32>,    // Includes leading ?
+  pub(crate) fragment: Option<u32>, // Includes leading #
 }
 
 impl Core {
@@ -27,12 +30,16 @@ impl Core {
     }
   }
 
+  pub(crate) fn authority<'a>(&self, data: &'a str) -> &'a str {
+    self.slice(data, self.method + 1..self.path)
+  }
+
   pub(crate) fn method<'a>(&self, data: &'a str) -> &'a str {
-    self.slice(data, self.method..self.method_id - 1)
+    self.slice(data, self.method + 1..self.method_id)
   }
 
   pub(crate) fn method_id<'a>(&self, data: &'a str) -> &'a str {
-    self.slice(data, self.method_id..self.path)
+    self.slice(data, self.method_id + 1..self.path)
   }
 
   pub(crate) fn path<'a>(&self, data: &'a str) -> &'a str {
@@ -60,6 +67,93 @@ impl Core {
     form_urlencoded::parse(self.query(data).unwrap_or_default().as_bytes())
   }
 
+  pub(crate) fn set_method(&mut self, buffer: &mut String, value: &str) {
+    let int: Int = Int::new(self.method_id, self.method + 1 + value.len() as u32);
+
+    buffer.replace_range(self.method as usize + 1..self.method_id as usize, value);
+
+    self.method_id = int.add(self.method_id);
+    self.path = int.add(self.path);
+    self.query = int.try_add(self.query);
+    self.fragment = int.try_add(self.fragment);
+  }
+
+  pub(crate) fn set_method_id(&mut self, buffer: &mut String, value: &str) {
+    let int: Int = Int::new(self.path, self.method_id + 1 + value.len() as u32);
+
+    buffer.replace_range(self.method_id as usize + 1..self.path as usize, value);
+
+    self.path = int.add(self.path);
+    self.query = int.try_add(self.query);
+    self.fragment = int.try_add(self.fragment);
+  }
+
+  pub(crate) fn set_path(&mut self, buffer: &mut String, value: &str) {
+    let end: u32 = self
+      .query
+      .or(self.fragment)
+      .unwrap_or_else(|| buffer.len() as u32);
+
+    let int: Int = Int::new(end, self.path + value.len() as u32);
+
+    buffer.replace_range(self.path as usize..end as usize, value);
+
+    self.query = int.try_add(self.query);
+    self.fragment = int.try_add(self.fragment);
+  }
+
+  pub(crate) fn set_query(&mut self, buffer: &mut String, value: Option<&str>) {
+    match (self.query, self.fragment, value) {
+      (Some(query), None, Some(value)) => {
+        buffer.replace_range(query as usize + 1.., value);
+      }
+      (None, Some(fragment), Some(value)) => {
+        self.query = Some(fragment);
+        self.fragment = Some(fragment + value.len() as u32 + 1);
+
+        buffer.insert_str(fragment as usize, "?");
+        buffer.insert_str(fragment as usize + 1, value);
+      }
+      (Some(query), Some(fragment), Some(value)) => {
+        self.fragment = Some(query + value.len() as u32 + 1);
+
+        buffer.replace_range(query as usize + 1..fragment as usize, value);
+      }
+      (None, None, Some(value)) => {
+        self.query = Some(buffer.len() as u32);
+        buffer.push('?');
+        buffer.push_str(value);
+      }
+      (Some(query), None, None) => {
+        self.query = None;
+        buffer.truncate(query as usize);
+      }
+      (Some(query), Some(fragment), None) => {
+        self.query = None;
+        self.fragment = Some(fragment - (fragment - query));
+
+        buffer.replace_range(query as usize..fragment as usize, "");
+      }
+      (None, Some(_) | None, None) => {
+        // do nothing
+      }
+    }
+  }
+
+  pub(crate) fn set_fragment(&mut self, buffer: &mut String, value: Option<&str>) {
+    if let Some(index) = self.fragment {
+      buffer.truncate(index as usize);
+    }
+
+    if let Some(value) = value {
+      self.fragment = Some(buffer.len() as u32);
+      buffer.push('#');
+      buffer.push_str(value);
+    } else {
+      self.fragment = None;
+    }
+  }
+
   fn slice<'a>(&self, data: &'a str, range: impl SliceExt) -> &'a str {
     range.slice(data)
   }
@@ -85,9 +179,9 @@ impl Core {
   ///
   ///   fragment           = *( pchar / "/" / "?" )
   ///
-  pub(crate) fn parse(input: impl AsRef<str>) -> Result<Self> {
+  pub(crate) fn parse(data: impl AsRef<str>) -> Result<Self> {
     let mut this: Self = Self::new();
-    let mut input: Input = Input::new(input.as_ref());
+    let mut input: Input = Input::new(data.as_ref());
 
     this.parse_scheme(&mut input)?;
     this.parse_method(&mut input)?;
@@ -96,16 +190,20 @@ impl Core {
     this.parse_query(&mut input)?;
     this.parse_fragment(&mut input)?;
 
+    this.check_invariants(data.as_ref(), false)?;
+
     Ok(this)
   }
 
-  pub(crate) fn parse_relative(input: impl AsRef<str>) -> Result<Self> {
+  pub(crate) fn parse_relative(data: impl AsRef<str>) -> Result<Self> {
     let mut this: Self = Self::new();
-    let mut input: Input = Input::new(input.as_ref());
+    let mut input: Input = Input::new(data.as_ref());
 
     this.parse_path(&mut input)?;
     this.parse_query(&mut input)?;
     this.parse_fragment(&mut input)?;
+
+    this.check_invariants(data.as_ref(), true)?;
 
     Ok(this)
   }
@@ -119,56 +217,48 @@ impl Core {
       return Err(Error::InvalidScheme);
     }
 
-    if matches!(input.next(), Some(':')) {
-      Ok(())
-    } else {
-      Err(Error::InvalidScheme)
-    }
+    Ok(())
   }
 
   fn parse_method(&mut self, input: &mut Input) -> Result<()> {
-    self.method = input.index();
+    if matches!(input.peek(), Some(':')) {
+      input.next();
+    } else {
+      return Err(Error::InvalidMethodName);
+    }
+
+    self.method = input.index() - 1;
 
     loop {
       match input.peek() {
         Some(':') | None => break,
-        Some('a'..='z') => {}
-        Some('0'..='9') => {}
+        Some(ch) if char_method(ch) => {}
         _ => return Err(Error::InvalidMethodName),
       }
 
       input.next();
     }
 
-    if self.method == input.index() {
-      return Err(Error::InvalidMethodName);
-    }
-
-    input.next();
-
     Ok(())
   }
 
   fn parse_method_id(&mut self, input: &mut Input) -> Result<()> {
-    self.method_id = input.index();
+    if matches!(input.peek(), Some(':')) {
+      input.next();
+    } else {
+      return Err(Error::InvalidMethodId);
+    }
+
+    self.method_id = input.index() - 1;
 
     loop {
       match input.peek() {
         Some('/' | '?' | '#') | None => break,
-        Some('a'..='z' | 'A'..='Z') => {}
-        Some('0'..='9') => {}
-        Some('.' | '-' | '_') => {}
-        Some(':') if input.index() > self.method_id => {}
+        Some(ch) if char_method_id(ch) => {}
         _ => return Err(Error::InvalidMethodId),
       }
 
       input.next();
-    }
-
-    // TODO: Return Err if colon is last parsed char
-
-    if self.method_id == input.index() {
-      return Err(Error::InvalidMethodId);
     }
 
     Ok(())
@@ -184,12 +274,7 @@ impl Core {
     loop {
       match input.peek() {
         Some('?' | '#') | None => break,
-        Some('a'..='z' | 'A'..='Z') => {}
-        Some('0'..='9') => {}
-        Some('-' | '.' | '_' | '~') => {}
-        Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
-        Some(':' | '@') => {}
-        Some('/') => {}
+        Some(ch) if char_path(ch) => {}
         _ => return Err(Error::InvalidPath),
       }
 
@@ -215,12 +300,7 @@ impl Core {
     loop {
       match input.peek() {
         Some('#') | None => break,
-        Some('a'..='z' | 'A'..='Z') => {}
-        Some('0'..='9') => {}
-        Some('-' | '.' | '_' | '~') => {}
-        Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
-        Some(':' | '@') => {}
-        Some('/' | '?') => {}
+        Some(ch) if char_query(ch) => {}
         _ => return Err(Error::InvalidQuery),
       }
 
@@ -246,12 +326,7 @@ impl Core {
     loop {
       match input.peek() {
         None => break,
-        Some('a'..='z' | 'A'..='Z') => {}
-        Some('0'..='9') => {}
-        Some('-' | '.' | '_' | '~') => {}
-        Some('!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=') => {}
-        Some(':' | '@') => {}
-        Some('/' | '?') => {}
+        Some(ch) if char_fragment(ch) => {}
         _ => return Err(Error::InvalidFragment),
       }
 
@@ -260,6 +335,88 @@ impl Core {
 
     Ok(())
   }
+
+  fn _is_valid_method(&self, data: &str) -> bool {
+    let value: &str = self.method(data);
+    !value.is_empty() && value.chars().all(char_method)
+  }
+
+  fn _is_valid_method_id(&self, data: &str) -> bool {
+    let value: &str = self.method_id(data);
+    !value.is_empty() && value.chars().all(char_method_id)
+  }
+
+  fn _is_valid_path(&self, data: &str) -> bool {
+    self.path(data).chars().all(char_path)
+  }
+
+  fn _is_valid_query(&self, data: &str) -> bool {
+    self
+      .query(data)
+      .map(|data| data.chars().all(char_query))
+      .unwrap_or(true)
+  }
+
+  fn _is_valid_fragment(&self, data: &str) -> bool {
+    self
+      .fragment(data)
+      .map(|data| data.chars().all(char_fragment))
+      .unwrap_or(true)
+  }
+
+  fn check_invariants(&self, data: &str, relative: bool) -> Result<()> {
+    if !relative && !self._is_valid_method(data) {
+      return Err(Error::InvalidMethodName);
+    }
+
+    if !relative && !self._is_valid_method_id(data) {
+      return Err(Error::InvalidMethodId);
+    }
+
+    if !self._is_valid_path(data) {
+      return Err(Error::InvalidPath);
+    }
+
+    if !self._is_valid_query(data) {
+      return Err(Error::InvalidQuery);
+    }
+
+    if !self._is_valid_fragment(data) {
+      return Err(Error::InvalidQuery);
+    }
+
+    Ok(())
+  }
+}
+
+// =============================================================================
+//
+// =============================================================================
+
+#[inline(always)]
+const fn char_method(ch: char) -> bool {
+  matches!(ch, '0'..='9' | 'a'..='z')
+}
+
+#[inline(always)]
+const fn char_method_id(ch: char) -> bool {
+  matches!(ch, '0'..='9' | 'a'..='z' | 'A'..='Z' | '.' | '-' | '_' | ':')
+}
+
+#[inline(always)]
+#[rustfmt::skip]
+const fn char_path(ch: char) -> bool {
+  char_method_id(ch) || matches!(ch, '~' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '@' | '/' /* | '%' */)
+}
+
+#[inline(always)]
+const fn char_query(ch: char) -> bool {
+  char_path(ch) || ch == '?'
+}
+
+#[inline(always)]
+const fn char_fragment(ch: char) -> bool {
+  char_path(ch) || ch == '?'
 }
 
 // =============================================================================
@@ -285,5 +442,39 @@ impl SliceExt for RangeFrom<u32> {
 impl SliceExt for RangeTo<u32> {
   fn slice<'a>(&self, string: &'a str) -> &'a str {
     &string[..self.end as usize]
+  }
+}
+
+// =============================================================================
+//
+// =============================================================================
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum Int {
+  N(u32),
+  P(u32),
+}
+
+impl Int {
+  const fn new(old: u32, new: u32) -> Self {
+    if old > new {
+      Self::N(old - new)
+    } else {
+      Self::P(new - old)
+    }
+  }
+
+  const fn add(self, other: u32) -> u32 {
+    match self {
+      Self::N(int) => other - int,
+      Self::P(int) => other + int,
+    }
+  }
+
+  const fn try_add(self, other: Option<u32>) -> Option<u32> {
+    match other {
+      Some(other) => Some(self.add(other)),
+      None => None,
+    }
   }
 }
