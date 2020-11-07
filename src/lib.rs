@@ -6,7 +6,6 @@
 //!
 //! - [DID Core](https://www.w3.org/TR/did-core/)
 //!
-#![feature(or_patterns)]
 #![no_std]
 
 #[cfg(not(feature = "alloc"))]

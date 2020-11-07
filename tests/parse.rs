@@ -30,6 +30,7 @@ fn test_parse_valid_method_id() {
 #[test]
 #[rustfmt::skip]
 fn test_parse_invalid_method_id() {
+  assert!(DID::parse("did:method:").is_err());
   assert!(DID::parse("did:method:: :").is_err());
   assert!(DID::parse("did:method: - - -").is_err());
   assert!(DID::parse("did:method:*****").is_err());

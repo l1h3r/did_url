@@ -134,7 +134,7 @@ impl Core {
 
         buffer.replace_range(query as usize..fragment as usize, "");
       }
-      (None, Some(_) | None, None) => {
+      (None, _, None) => {
         // do nothing
       }
     }
@@ -190,7 +190,13 @@ impl Core {
     this.parse_query(&mut input)?;
     this.parse_fragment(&mut input)?;
 
-    this.check_invariants(data.as_ref(), false)?;
+    if this.method(data.as_ref()).is_empty() {
+      return Err(Error::InvalidMethodName);
+    }
+
+    if this.method_id(data.as_ref()).is_empty() {
+      return Err(Error::InvalidMethodId);
+    }
 
     Ok(this)
   }
@@ -202,8 +208,6 @@ impl Core {
     this.parse_path(&mut input)?;
     this.parse_query(&mut input)?;
     this.parse_fragment(&mut input)?;
-
-    this.check_invariants(data.as_ref(), true)?;
 
     Ok(this)
   }
@@ -253,7 +257,7 @@ impl Core {
 
     loop {
       match input.peek() {
-        Some('/' | '?' | '#') | None => break,
+        Some('/') | Some('?') | Some('#') | None => break,
         Some(ch) if char_method_id(ch) => {}
         _ => return Err(Error::InvalidMethodId),
       }
@@ -267,13 +271,13 @@ impl Core {
   fn parse_path(&mut self, input: &mut Input) -> Result<()> {
     self.path = input.index();
 
-    if matches!(input.peek(), Some('?' | '#') | None) {
+    if matches!(input.peek(), Some('?') | Some('#') | None) {
       return Ok(());
     }
 
     loop {
       match input.peek() {
-        Some('?' | '#') | None => break,
+        Some('?') | Some('#') | None => break,
         Some(ch) if char_path(ch) => {}
         _ => return Err(Error::InvalidPath),
       }
@@ -331,58 +335,6 @@ impl Core {
       }
 
       input.next();
-    }
-
-    Ok(())
-  }
-
-  fn _is_valid_method(&self, data: &str) -> bool {
-    let value: &str = self.method(data);
-    !value.is_empty() && value.chars().all(char_method)
-  }
-
-  fn _is_valid_method_id(&self, data: &str) -> bool {
-    let value: &str = self.method_id(data);
-    !value.is_empty() && value.chars().all(char_method_id)
-  }
-
-  fn _is_valid_path(&self, data: &str) -> bool {
-    self.path(data).chars().all(char_path)
-  }
-
-  fn _is_valid_query(&self, data: &str) -> bool {
-    self
-      .query(data)
-      .map(|data| data.chars().all(char_query))
-      .unwrap_or(true)
-  }
-
-  fn _is_valid_fragment(&self, data: &str) -> bool {
-    self
-      .fragment(data)
-      .map(|data| data.chars().all(char_fragment))
-      .unwrap_or(true)
-  }
-
-  fn check_invariants(&self, data: &str, relative: bool) -> Result<()> {
-    if !relative && !self._is_valid_method(data) {
-      return Err(Error::InvalidMethodName);
-    }
-
-    if !relative && !self._is_valid_method_id(data) {
-      return Err(Error::InvalidMethodId);
-    }
-
-    if !self._is_valid_path(data) {
-      return Err(Error::InvalidPath);
-    }
-
-    if !self._is_valid_query(data) {
-      return Err(Error::InvalidQuery);
-    }
-
-    if !self._is_valid_fragment(data) {
-      return Err(Error::InvalidQuery);
     }
 
     Ok(())
